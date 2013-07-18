@@ -3,6 +3,11 @@
 
 #define F_CPU 20000000UL // 20 MHz
 
+#define BUTTON_DDR DDRD
+#define BUTTON_PORT PORTD
+#define BUTTON_PIN 6
+#define BUTTON_INPUT PIND
+
 #include <util/delay.h>
 
 #include "util.h"
@@ -21,13 +26,6 @@ volatile uint8_t busState = STATE_IDLE;
 volatile uint8_t bitCount = 0, parity = 0, sendByte = 0;
 
 volatile RingBuffer ring;
-
-/*** MAIN METHOD ***/
-
-#define BUTTON_DDR DDRD
-#define BUTTON_PORT PORTD
-#define BUTTON_PIN 6
-#define BUTTON_INPUT PIND
 
 int main(void) {
 	BUTTON_PORT |= _BV(BUTTON_PIN); // pullup on button
