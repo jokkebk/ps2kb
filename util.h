@@ -14,7 +14,10 @@
 #define PS2_DATA_INPUT PINB
 
 #define isClockHigh() (PS2_CLOCK_INPUT & (1 << PS2_CLOCK_PIN))
+#define isClockLow() (!isClockHigh())
+
 #define isDataHigh() (PS2_DATA_INPUT & (1 << PS2_DATA_PIN))
+#define isDataLow() (!isDataHigh())
 
 static inline void releaseClock() {
 	PS2_CLOCK_DDR &= ~_BV(PS2_CLOCK_PIN); // set as input
