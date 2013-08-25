@@ -1,0 +1,8 @@
+*.elf
+*.o
+*.d
+*.hex
+*.jpg
+*.pptx
+tags
+
