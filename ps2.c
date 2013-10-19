@@ -6,6 +6,7 @@
 
 // Free-running milliseconds counter
 volatile uint16_t millis = 0;
+volatile PS2Error ps2Error = PS2ERROR_NONE;
 
 // PS/2 send and receive buffers
 volatile RingBuffer sendBuffer, receiveBuffer;
@@ -29,7 +30,7 @@ ISR(INT_VECT_1) {
 }
 
 // PS/2 driver state machine starts here
-static volatile uint8_t generateClock = 0, nonIdle = 0;
+static volatile uint8_t generateClock = 0;
 static volatile uint8_t stateBits = 0, stateParity = 0, stateByte = 0;
 
 typedef void *(*PS2Callback)();
@@ -57,10 +58,6 @@ ISR(TIMER0_COMPA_vect) {
 	if(clockPhase & 1) { // Middle of high/low
 		if(clockPhase & 2) // High
 			cbCurrent = (PS2Callback)(*cbCurrent)();
-		else if(++nonIdle == 255) { // use middle low for idle reset logic
-			cbCurrent = cbIdle; // force to idle after 20 ms 
-			releaseData(); // rare case if reset after cbReceiveAck()
-		}
 	} else if(generateClock) { // Transition
 		// generateClock is only modified on clock high so additional
 		// safeguards for clock left low shouldn't be necessary
@@ -76,7 +73,6 @@ ISR(TIMER0_COMPA_vect) {
 // We should be idle (and not holding either data or clock line)
 void *cbIdle() {
 	generateClock = 0;
-	nonIdle = 0; // reset non-idle counter
 
 	if(isClockLow())
 		return cbInhibit;
@@ -89,10 +85,9 @@ void *cbStillIdle() {
 	if(isClockLow())
 		return cbInhibit;
 
-	if(ringEmpty(sendBuffer)) { // no data to send
-		nonIdle = 0; // reset non-idle counter
+	// ps2Error will hold data sending until cleared
+	if(ps2Error || ringEmpty(sendBuffer)) 
 		return cbStillIdle;
-	}
 
 	holdData(); // Start bit (0)
 	generateClock = 1;
@@ -106,10 +101,8 @@ void *cbStillIdle() {
 
 // Clock line was held low last time
 void *cbInhibit() {
-	if(isClockLow()) { // still held low
-		nonIdle = 0; // reset non-idle counter
+	if(isClockLow()) // still held low
 		return cbInhibit;
-	}
 
 	if(isDataHigh()) // no request to send
 		return cbIdle;
@@ -126,7 +119,7 @@ void *cbInhibit() {
 void *cbSendBit() {
 	if(isClockLow()) {
 		releaseData(); // make sure data is released
-		// TODO: Signal main program that send was aborted
+		ps2Error = PS2ERROR_INTERRUPTED;
 		return cbInhibit;
 	}
 
@@ -148,7 +141,7 @@ void *cbSendBit() {
 void *cbSendParity() {
 	if(isClockLow()) {
 		releaseData(); // make sure data is released
-		// TODO: Signal main program that send was aborted
+		ps2Error = PS2ERROR_INTERRUPTED;
 		return cbInhibit;
 	}
 
@@ -194,10 +187,8 @@ void *cbReceiveParity() {
 
 // Send ACK 
 void *cbReceiveAck() {
-	if(isDataLow()) { // data NOT released
-		// TODO: Generate error
+	if(isDataLow()) // data NOT released
 		return cbReceiveAck; // generate clock pulses until released
-	}
 
 	holdData();
 

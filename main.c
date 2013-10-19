@@ -10,144 +10,169 @@
 #endif
 
 static prog_uint8_t hexCode[16] = {
-	0x45, 0x16, 0x1E, 0x26, 
-	0x25, 0x2E, 0x36, 0x3D,
-	0x3E, 0x46, 0x1C, 0x32,
-	0x21, 0x23, 0x24, 0x2B
+    0x45, 0x16, 0x1E, 0x26, 
+    0x25, 0x2E, 0x36, 0x3D,
+    0x3E, 0x46, 0x1C, 0x32,
+    0x21, 0x23, 0x24, 0x2B
 };
 
 void sendCode(uint8_t code) {
-	MAKE_CODE(code);
-	for(millis = 0; millis < 10; ) 
-		wdt_reset();
-	BREAK_CODE(code);
+    MAKE_CODE(code);
+    for(millis = 0; millis < 10; ) 
+        wdt_reset();
+    BREAK_CODE(code);
 }
 
 void sendNibble(uint8_t n) {
-	sendCode(pgm_read_byte(&hexCode[n]));
+    sendCode(pgm_read_byte(&hexCode[n]));
 }
 
 void sendHex(uint8_t hex) {
-	sendNibble(hex >> 4);
-		
-	for(millis = 0; millis < 10; ) 
-		wdt_reset();
+    sendNibble(hex >> 4);
 
-	sendNibble(hex & 15);
+    for(millis = 0; millis < 10; ) 
+        wdt_reset();
+
+    sendNibble(hex & 15);
 }
 
 int main(void) {
-	uint8_t buttonDown = 0, repeat = 0, leds = 0;
-	uint16_t adc;
-	uint8_t knocks = 0;
+    uint16_t adc;
+    uint8_t leds = 0, knocks = 0, state = 0;
 
-	wdt_enable(WDTO_1S); // Enable watchdog timer to avoid hanging up
+    wdt_enable(WDTO_1S); // Enable watchdog timer to avoid hanging up
 
 #ifdef USE_BUTTON
-	BUTTON_PORT |= _BV(BUTTON_PIN); // pullup on button
+    BUTTON_PORT |= _BV(BUTTON_PIN); // pullup on button
 #else
-	adcStart();
+    adcStart();
 #endif
 
-#ifdef LED_PIN // Have a LED
-	LED_DDR |= _BV(LED_PIN); // Initialize as output
+    initPS2(); // Initializes timers also
+
+#ifdef LED_PIN
+    LED_DDR |= _BV(LED_PIN); // Initialize as output
+
+    // Signal power-up with 3s LED
+    LED_PORT |= _BV(LED_PIN); // ON
 #endif
 
-	initPS2(); // Initializes timers also
+    // small delay after power-up to avoid sending random
+    // stuff if power supply is fluctuating (possible?)
+    for(millis = 0; millis < 3000; )
+        wdt_reset(); 
 
-	// Signal power-up with 3s LED
-	LED_PORT |= _BV(LED_PIN); // ON
+#ifdef LED_PIN
+    LED_PORT &= ~_BV(LED_PIN); // OFF
+#endif
 
-	for(millis = 0; millis < 3000; )
-		wdt_reset();
-
-	LED_PORT &= ~_BV(LED_PIN); // OFF
-
-	while(1) {
-		wdt_reset(); // reset watchdog
+    while(1) {
+        wdt_reset(); // reset watchdog
 
 #ifdef USE_BUTTON
-		if(BUTTON_DOWN() && millis > 500) {
+        if(BUTTON_DOWN() && millis > 500) {
 #else // ADC
-		if((adc = adcRead()) > ADC_TRESHOLD && millis > 500) {
+        if((adc = adcRead()) > ADC_TRESHOLD && millis > 500) {
 #endif
-			if(millis > 3000)
-				knocks = 1;
-			else
-				knocks++;
+            if(millis > 3000)
+                knocks = 1;
+            else
+                knocks++;
 
-			if(knocks >= 3) {
-				sendCode(0x29);
-				knocks = 0;
-			}
+            // To make things simpler, we won't send space
+            // presses while host has sent something or we
+            // still have pending data in send buffer
+            if(knocks >= 3 && ringEmpty(receiveBuffer) &&
+                    ringEmpty(sendBuffer)) {
+                sendCode(0x29);
+                state = 1; // indicate we're sending
+                knocks = 0;
+            }
 
-			millis = 0;
-		}
+            millis = 0;
+        }
 
-		// Handle PS/2 commands - should be complete enough to fool
-		// most PCs
-		while(!ringEmpty(receiveBuffer)) {
-			if(IS_PS2_CMD(ringHead(receiveBuffer)))
-				ringClear(&sendBuffer); // clear send buffer on command
+        if(ps2Error) { // sending data was interrupted
+            if(state == 1) { // we were sending space bar
+                ringClear(&sendBuffer);
+                BREAK_CODE(0x29); // send at least the break code
+            } else {
+                // Because send buffer is cleared when receiving
+                // a PS/2 command, we can resend stuff just by
+                // setting sendBuffer.read to "zero"
+                sendBuffer.read = sendBuffer.buffer;
+            }
 
-			switch(ringDequeue(&receiveBuffer)) {
-				case PS2_Receive_Error: // unknown/invalid command
-					SEND_ERROR();
-					break;
+            ps2Error = PS2ERROR_NONE; // resume business
+        }
 
-				// Resend (0xFE) is handled by PS2 code internally
+        if(state == 1 && ringEmpty(sendBuffer))
+            state = 0; // seems like we succeeded!
 
-				case PS2_CMD_Echo:
-					SEND_ECHO();
-					break;
+        // Handle PS/2 commands - should be complete enough to fool
+        // most PCs
+        while(!ringEmpty(receiveBuffer)) {
+            if(IS_PS2_CMD(*receiveBuffer.read))
+                ringClear(&sendBuffer); // clear send buffer on command
 
-				case PS2_CMD_Reset:
-					SEND_ACK();
-					// will break repeat but so what
-					for(millis = 0; millis < 10; ) 
-						wdt_reset();
-					SEND_BAT_OK();
-					break;
+            switch(ringDequeue(&receiveBuffer)) {
+                case PS2_Receive_Error: // unknown/invalid command
+                    SEND_ERROR();
+                    break;
 
-				case PS2_CMD_Read_ID:
-					SEND_ID();
-					break;
+                // Resend (0xFE) is handled by PS2 code internally
 
-				case PS2_CMD_Set_Typematic_Rate_Delay:
-					SEND_ACK();
-					for(millis = 0; millis < 1000 && // wait 1s max
-							ringEmpty(receiveBuffer); )
-						wdt_reset();
+                case PS2_CMD_Echo:
+                    SEND_ECHO();
+                    break;
 
-					if(!ringEmpty(receiveBuffer) && // received data
-							!IS_PS2_CMD(ringHead(receiveBuffer))) {
-						ringDequeue(&receiveBuffer); // consume
-						SEND_ACK();
-					} // else handle normally in next round
-					break;
+                case PS2_CMD_Reset:
+                    SEND_ACK();
+                    // will break repeat but so what
+                    for(millis = 0; millis < 10; ) 
+                        wdt_reset();
+                    SEND_BAT_OK();
+                    break;
 
-				case 0xED:
-					SEND_ACK();
-					for(millis = 0; millis < 1000 && // wait 1s max
-							ringEmpty(receiveBuffer); )
-						wdt_reset();
+                case PS2_CMD_Read_ID:
+                    SEND_ID();
+                    break;
 
-					if(!ringEmpty(receiveBuffer) && // received data
-							!IS_PS2_CMD(ringHead(receiveBuffer))) {
-						leds = ringDequeue(&receiveBuffer); // store
-						SEND_ACK();
-					} // else handle normally in next round
-					break;
+                case PS2_CMD_Set_Typematic_Rate_Delay:
+                    SEND_ACK();
+                    for(millis = 0; millis < 1000 && // wait 1s max
+                            ringEmpty(receiveBuffer); )
+                        wdt_reset();
 
-				default:
-					// Most other commands can be adequately emulated
-					// with just acknowledging everything, including
-					// set typematic etc. rates.
-					SEND_ACK();
-					break;
-			}
-		}
-	}
+                    if(!ringEmpty(receiveBuffer) && // received data
+                            !IS_PS2_CMD(*receiveBuffer.read)) {
+                        ringDequeue(&receiveBuffer); // consume
+                        SEND_ACK();
+                    } // else handle normally in next round
+                    break;
 
-	return 1;
+                case 0xED:
+                    SEND_ACK();
+                    for(millis = 0; millis < 1000 && // wait 1s max
+                            ringEmpty(receiveBuffer); )
+                        wdt_reset();
+
+                    if(!ringEmpty(receiveBuffer) && // received data
+                            !IS_PS2_CMD(*receiveBuffer.read)) {
+                        leds = ringDequeue(&receiveBuffer); // store
+                        SEND_ACK();
+                    } // else handle normally in next round
+                    break;
+
+                default:
+                    // Most other commands can be adequately emulated
+                    // with just acknowledging everything, including
+                    // set typematic etc. rates.
+                    SEND_ACK();
+                    break;
+            }
+        }
+    }
+
+    return 1;
 }

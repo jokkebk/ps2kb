@@ -8,8 +8,14 @@
 #define PS2_LED_NUM_LOCK 2
 #define PS2_LED_CAPS_LOCK 4
 
+typedef enum {
+	PS2ERROR_NONE = 0,
+	PS2ERROR_INTERRUPTED = 1
+} PS2Error;
+
 // Free-running milliseconds counter
 extern volatile uint16_t millis;
+extern volatile PS2Error ps2Error;
 
 // PS/2 send and receive buffers
 extern volatile RingBuffer sendBuffer, receiveBuffer;
