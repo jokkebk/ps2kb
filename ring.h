@@ -1,7 +1,14 @@
-/* Ring buffer implementation. It is not thread-safe so any program
- * using it should take care of disabling interrupts etc. if needed.
- * However, if main program is only using Enqueue and interrupt only
- * De/Unqueue or vice versa, it should be quite safe.
+/**
+ * PS/2 keyboard implementation and knock sensor.
+ * Ring buffer implementation. This implementation is not thread-safe
+ * so any program using it should take care of disabling interrupts 
+ * etc. if needed. However, if main program is only using Enqueue and
+ * interrupt only De/Unqueue or vice versa, it should be quite safe.
+ *
+ * Copyright (C) Joonas Pihlajamaa 2013.
+ * Licensed under GNU GPL v3, see License.txt for details.
+ *
+ * See details about this project at http://codeandlife.com/?p=1488
  */
 #ifndef __RING_H
 #define __RING_H

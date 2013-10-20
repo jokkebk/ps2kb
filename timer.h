@@ -1,3 +1,12 @@
+/**
+ * PS/2 keyboard implementation and knock sensor.
+ * Timer routines.
+ *
+ * Copyright (C) Joonas Pihlajamaa 2013.
+ * Licensed under GNU GPL v3, see License.txt for details.
+ *
+ * See details about this project at http://codeandlife.com/?p=1488
+ */
 #ifndef __TIMER_H
 #define __TIMER_H
 

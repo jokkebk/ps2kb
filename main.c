@@ -1,3 +1,12 @@
+/**
+ * PS/2 keyboard implementation and knock sensor.
+ * Main program file.
+ *
+ * Copyright (C) Joonas Pihlajamaa 2013.
+ * Licensed under GNU GPL v3, see License.txt for details.
+ *
+ * See details about this project at http://codeandlife.com/?p=1488
+ */
 #include <avr/wdt.h> 
 #include <avr/pgmspace.h>
 
