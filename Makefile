@@ -3,8 +3,10 @@ OBJCOPY = avr-objcopy
 DUDE = avrdude
 
 MCU = attiny45
-CFLAGS = -Os -mmcu=$(MCU) -DF_CPU=8000000 -DLED_PIN=PB4 -DMINIMAL
-#CFLAGS = -Os -mmcu=$(MCU) -DF_CPU=8000000 -DLED_PIN=PB4
+CFLAGS = -Os -mmcu=$(MCU) -DF_CPU=8000000 -DLED_PIN=PB4
+# The following should work on devices with only 2 kB of flash
+#CFLAGS = -Os -mmcu=$(MCU) -DF_CPU=8000000 -DLED_PIN=PB4 -DMINIMAL
+# If you want to use a button instead of piezo...
 #CFLAGS = -O2 -mmcu=$(MCU) -DF_CPU=8000000 -DUSE_BUTTON
 OBJFLAGS = -j .text -j .data -O ihex
 DUDEFLAGS = -p $(MCU) -c usbtiny -q
