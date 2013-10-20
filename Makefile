@@ -3,7 +3,8 @@ OBJCOPY = avr-objcopy
 DUDE = avrdude
 
 MCU = attiny45
-CFLAGS = -O2 -mmcu=$(MCU) -DF_CPU=8000000 -DLED_PIN=PB4
+CFLAGS = -Os -mmcu=$(MCU) -DF_CPU=8000000 -DLED_PIN=PB4 -DMINIMAL
+#CFLAGS = -Os -mmcu=$(MCU) -DF_CPU=8000000 -DLED_PIN=PB4
 #CFLAGS = -O2 -mmcu=$(MCU) -DF_CPU=8000000 -DUSE_BUTTON
 OBJFLAGS = -j .text -j .data -O ihex
 DUDEFLAGS = -p $(MCU) -c usbtiny -q

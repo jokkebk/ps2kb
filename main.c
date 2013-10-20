@@ -9,19 +9,21 @@
 #include "adc.h"
 #endif
 
-static prog_uint8_t hexCode[16] = {
-    0x45, 0x16, 0x1E, 0x26, 
-    0x25, 0x2E, 0x36, 0x3D,
-    0x3E, 0x46, 0x1C, 0x32,
-    0x21, 0x23, 0x24, 0x2B
-};
-
 void sendCode(uint8_t code) {
     MAKE_CODE(code);
     for(millis = 0; millis < 10; ) 
         wdt_reset();
     BREAK_CODE(code);
 }
+
+#ifndef MINIMAL
+// Not used currently, useful for debugging mainly
+static prog_uint8_t hexCode[16] = {
+    0x45, 0x16, 0x1E, 0x26, 
+    0x25, 0x2E, 0x36, 0x3D,
+    0x3E, 0x46, 0x1C, 0x32,
+    0x21, 0x23, 0x24, 0x2B
+};
 
 void sendNibble(uint8_t n) {
     sendCode(pgm_read_byte(&hexCode[n]));
@@ -35,6 +37,7 @@ void sendHex(uint8_t hex) {
 
     sendNibble(hex & 15);
 }
+#endif
 
 int main(void) {
     uint16_t adc;
@@ -138,6 +141,24 @@ int main(void) {
                     SEND_ID();
                     break;
 
+                case PS2_CMD_Set_Reset_LEDs:
+#ifndef MINIMAL 
+                    // The "leds" variable is not currently used so
+                    // don't store it in minimal version, just use
+                    // same code as for typematic rate (ignore value)
+                    SEND_ACK();
+                    for(millis = 0; millis < 1000 && // wait 1s max
+                            ringEmpty(receiveBuffer); )
+                        wdt_reset();
+
+                    if(!ringEmpty(receiveBuffer) && // received data
+                            !IS_PS2_CMD(*receiveBuffer.read)) {
+                        leds = ringDequeue(&receiveBuffer); // store
+                        SEND_ACK();
+                    } // else handle normally in next round
+                    break;
+#endif
+
                 case PS2_CMD_Set_Typematic_Rate_Delay:
                     SEND_ACK();
                     for(millis = 0; millis < 1000 && // wait 1s max
@@ -147,19 +168,6 @@ int main(void) {
                     if(!ringEmpty(receiveBuffer) && // received data
                             !IS_PS2_CMD(*receiveBuffer.read)) {
                         ringDequeue(&receiveBuffer); // consume
-                        SEND_ACK();
-                    } // else handle normally in next round
-                    break;
-
-                case 0xED:
-                    SEND_ACK();
-                    for(millis = 0; millis < 1000 && // wait 1s max
-                            ringEmpty(receiveBuffer); )
-                        wdt_reset();
-
-                    if(!ringEmpty(receiveBuffer) && // received data
-                            !IS_PS2_CMD(*receiveBuffer.read)) {
-                        leds = ringDequeue(&receiveBuffer); // store
                         SEND_ACK();
                     } // else handle normally in next round
                     break;
